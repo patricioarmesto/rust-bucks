@@ -10,3 +10,7 @@ service_name = "rust-bucks"
 url = "sqlite:data.db?mode=rwc"
 connection_timeout_secs = 10
 max_connections = 5
+
+[pools.orders]
+read_timeout_secs = 200
+write_timeout_secs = 500

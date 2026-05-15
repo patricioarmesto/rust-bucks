@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use serde::Deserialize;
 
@@ -6,6 +8,7 @@ pub struct Settings {
     pub server: ServerSettings,
     pub observability: ObservabilitySettings,
     pub database: DatabaseSettings,
+    pub pools: HashMap<String, PoolConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +27,12 @@ pub struct DatabaseSettings {
     pub url: String,
     pub connection_timeout_secs: u64,
     pub max_connections: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PoolConfig {
+    pub read_timeout_secs: u64,
+    pub write_timeout_secs: u64,
 }
 
 impl Settings {
