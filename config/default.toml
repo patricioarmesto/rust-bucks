@@ -5,3 +5,8 @@ port = 3000
 [observability]
 log_level = "info"
 service_name = "rust-bucks"
+
+[database]
+url = "sqlite:data.db?mode=rwc"
+connection_timeout_secs = 10
+max_connections = 5
