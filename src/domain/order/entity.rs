@@ -47,7 +47,7 @@ impl Order {
         let now = Utc::now();
 
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4(), // requires uuid feature "v4"
             customer_name,
             drink,
             state: OrderState::Created,

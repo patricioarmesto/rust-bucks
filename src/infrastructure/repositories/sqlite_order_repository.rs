@@ -18,9 +18,12 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 use std::sync::Arc;
+use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 use tokio::runtime::Handle;
+use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::domain::order::entity::Order;
@@ -33,12 +36,16 @@ use crate::domain::order::state::OrderState;
 #[derive(Clone)]
 pub struct SqliteOrderRepository {
     pool: Arc<SqlitePool>,
+    read_timeout: Duration,
+    write_timeout: Duration,
 }
 
 impl SqliteOrderRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, read_timeout: Duration, write_timeout: Duration) -> Self {
         Self {
             pool: Arc::new(pool),
+            read_timeout,
+            write_timeout,
         }
     }
 }
@@ -56,11 +63,9 @@ impl OrderRepository for SqliteOrderRepository {
     //  sqlx returns, keeping sqlx types out of the domain boundary.
     // ──────────────────────────────────────────────────────────────────────
     fn save(&self, order: &Order) -> Result<(), OrderRepositoryError> {
-        Handle::current()
-            .block_on(async {
+        let result = Handle::current().block_on(async {
+            timeout(self.write_timeout, async {
                 sqlx::query(
-                    // Use INSERT OR REPLACE for idempotency — calling save
-                    // twice with the same id updates rather than errors.
                     r#"
                     INSERT OR REPLACE INTO orders (
                         id, customer_name, drink, state, created_at, updated_at
@@ -68,8 +73,6 @@ impl OrderRepository for SqliteOrderRepository {
                     VALUES (?, ?, ?, ?, ?, ?)
                     "#,
                 )
-                // Domain values are serialized to strings for storage.
-                // The reverse happens in find_by_id below.
                 .bind(order.id.to_string())
                 .bind(&order.customer_name)
                 .bind(&order.drink)
@@ -79,9 +82,17 @@ impl OrderRepository for SqliteOrderRepository {
                 .execute(&*self.pool)
                 .await
             })
-            .map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?;
+            .await
+        });
 
-        Ok(())
+        match result {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(e)) => Err(OrderRepositoryError::Persistence(e.to_string())),
+            Err(_) => Err(OrderRepositoryError::Persistence(format!(
+                "write query timed out after {:?}",
+                self.write_timeout
+            ))),
+        }
     }
 
     // ── find_by_id ────────────────────────────────────────────────────────
@@ -92,8 +103,8 @@ impl OrderRepository for SqliteOrderRepository {
     fn find_by_id(&self, id: Uuid) -> Result<Option<Order>, OrderRepositoryError> {
         let id_str = id.to_string();
 
-        let row = Handle::current()
-            .block_on(async {
+        let row = match Handle::current().block_on(async {
+            timeout(self.read_timeout, async {
                 sqlx::query_as::<_, (String, String, String, String, String, String)>(
                     r#"
                     SELECT id, customer_name, drink, state, created_at, updated_at
@@ -105,7 +116,17 @@ impl OrderRepository for SqliteOrderRepository {
                 .fetch_optional(&*self.pool)
                 .await
             })
-            .map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?;
+            .await
+        }) {
+            Ok(Ok(row)) => row,
+            Ok(Err(e)) => return Err(OrderRepositoryError::Persistence(e.to_string())),
+            Err(_) => {
+                return Err(OrderRepositoryError::Persistence(format!(
+                    "read query timed out after {:?}",
+                    self.read_timeout
+                )));
+            }
+        };
 
         // Pattern match on Option<Row>. If None, return Ok(None) — no error,
         // the order simply doesn't exist. Domain handles "not found" semantics.
@@ -123,22 +144,27 @@ impl OrderRepository for SqliteOrderRepository {
             "Preparing" => OrderState::Preparing,
             "Ready" => OrderState::Ready,
             "Cancelled" => OrderState::Cancelled,
-            _ => return Err(OrderRepositoryError::Persistence("invalid order state".into())),
+            _ => {
+                return Err(OrderRepositoryError::Persistence(
+                    "invalid order state".into(),
+                ));
+            }
         };
 
         // Every parse error is wrapped in OrderRepositoryError::Persistence,
         // which the application layer can log or map to an HTTP 500.
         // The domain never sees raw sqlx or parse errors.
         let order = Order {
-            id: Uuid::parse_str(&id).map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?,
+            id: Uuid::parse_str(&id)
+                .map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?,
             customer_name,
             drink,
             state,
             created_at: created_at
-                .parse()
+                .parse::<DateTime<Utc>>()
                 .map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?,
             updated_at: updated_at
-                .parse()
+                .parse::<DateTime<Utc>>()
                 .map_err(|e| OrderRepositoryError::Persistence(e.to_string()))?,
         };
 
