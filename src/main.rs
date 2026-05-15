@@ -44,6 +44,9 @@ async fn main() -> Result<()> {
         get_order: Arc::new(application::orders::get::GetOrderUseCase::new(Arc::clone(
             &order_repository,
         ))),
+        cancel_order: Arc::new(application::orders::cancel::CancelOrderUseCase::new(
+            Arc::clone(&order_repository),
+        )),
     };
 
     info!("starting rust-bucks");

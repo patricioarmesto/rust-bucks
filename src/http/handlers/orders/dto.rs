@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::domain::order::entity::Order;
 
 #[derive(Debug, Serialize)]
-pub struct OrderDto {
+pub struct OrderResponse {
     pub id: Uuid,
     pub customer_name: String,
     pub drink: String,
@@ -13,7 +13,7 @@ pub struct OrderDto {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<Order> for OrderDto {
+impl From<Order> for OrderResponse {
     fn from(order: Order) -> Self {
         Self {
             id: order.id,

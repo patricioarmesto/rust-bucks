@@ -3,8 +3,7 @@ use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::application::orders::dto::OrderDto;
-use crate::domain::order::repository::OrderRepository;
+use crate::domain::order::{entity::Order, repository::OrderRepository};
 
 #[derive(Debug)]
 pub struct GetOrder {
@@ -21,9 +20,9 @@ impl GetOrderUseCase {
     }
 
     #[instrument(skip(self))]
-    pub async fn execute(&self, query: GetOrder) -> anyhow::Result<Option<OrderDto>> {
+    pub async fn execute(&self, query: GetOrder) -> anyhow::Result<Option<Order>> {
         let order = self.repository.find_by_id(query.order_id)?;
 
-        Ok(order.map(Into::into))
+        Ok(order)
     }
 }

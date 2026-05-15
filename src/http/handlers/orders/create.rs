@@ -1,7 +1,8 @@
 use axum::{Json, extract::State};
 use serde::Deserialize;
 
-use crate::application::orders::{create::CreateOrder, dto::OrderDto};
+use crate::application::orders::create::CreateOrder;
+use crate::http::handlers::orders::dto::OrderResponse;
 use crate::http::handlers::orders::error::AppError;
 use crate::http::state::AppState;
 
@@ -14,7 +15,7 @@ pub struct CreateOrderRequest {
 pub async fn create_order(
     State(state): State<AppState>,
     Json(request): Json<CreateOrderRequest>,
-) -> Result<Json<OrderDto>, AppError> {
+) -> Result<Json<OrderResponse>, AppError> {
     let order = state
         .create_order
         .execute(CreateOrder {
@@ -23,5 +24,5 @@ pub async fn create_order(
         })
         .await?;
 
-    Ok(Json(order))
+    Ok(Json(order.into()))
 }

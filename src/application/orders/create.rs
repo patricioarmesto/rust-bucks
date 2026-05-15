@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use tracing::{info, instrument};
 
-use crate::application::orders::dto::OrderDto;
 use crate::domain::order::{entity::Order, repository::OrderRepository};
 
 #[derive(Debug)]
@@ -21,13 +20,13 @@ impl CreateOrderUseCase {
     }
 
     #[instrument(skip(self))]
-    pub async fn execute(&self, command: CreateOrder) -> anyhow::Result<OrderDto> {
+    pub async fn execute(&self, command: CreateOrder) -> anyhow::Result<Order> {
         let order = Order::create(command.customer_name, command.drink);
 
         self.repository.save(&order)?;
 
         info!(order_id = %order.id, "order created");
 
-        Ok(order.into())
+        Ok(order)
     }
 }
